@@ -1,0 +1,101 @@
+---
+title: "Storm NOAA Data Shows Tornadoes Cause Most Harm and Damages"
+author: "Jackie Milhans"
+date: "July 25, 2015"
+output: html_document
+---
+
+##Synopsis
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.  
+
+The data shows that tornadoes cause the largest number of fatalities and injuries to humans. In addition, tornadoes cause the most economic damage when looking at combied property damage and crop damage. Tornadoes cause the largest property damages, while hail causes the greatest amount of crop damage.
+
+##Data Processing
+
+The data for this assignment come in the form of a comma-separated-value file compressed via the bzip2 algorithm to reduce its size. Here, we load the data.
+
+
+```{r}
+#download the data
+fileURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(fileURL, destfile = "repStormData.csv.bz2", method = "curl")
+
+#read the csv file
+noaaData <- read.csv("./repStormData.csv.bz2")
+head(noaaData)
+
+#load necessary libraries
+library(Hmisc)
+library(ggplot2)
+library(reshape)
+library(car)
+
+```
+
+In order to better understand the number of injuries and fatalities by event to humans, we need to reformat the data. Here we examine the injuries to humans for events that occur. 
+
+
+```{r}
+
+#clean data labels by changing to lower case
+noaaData$EVTYPE <- capitalize(tolower(noaaData$EVTYPE))
+
+#split and summarize data to better understand number of injuries and fatalities
+
+harmful <- aggregate(cbind(FATALITIES, INJURIES) ~ EVTYPE, noaaData, sum)
+harmData <- melt(head(harmful[order(-harmful$FATALITIES, -harmful$INJURIES),],10))
+```
+
+Now, we look at the economic impact of weather events by examining the property and crop damages caused by weather-related events.
+
+According to the data description, estimates should be rounded to three significant digits, followed by an alphabetical character signifying the magnitude of the number, i.e., 1.55B for $1,550,000,000. Alphabetical characters used to signify magnitude include “K” for thousands, “M” for millions, and “B” for billions. 
+
+```{r}
+
+#CROPDMG value will be changed accordingly to numeric using:
+# "M", "K", "B" which mean 1000000, 1000, 1000000000 respectively.
+
+noaaData$PROPDMGEXP <- as.numeric(recode(noaaData$PROPDMGEXP,"'0'=1;'1'=10;'2'=10^2;'3'=10^3;'4'=10^4;'5'=10^5;'6'=10^6;'7'=10^7;'8'=10^8;'b'=10^9;'h'=10^2;'k'=10^3;'m'=10^6;'-'=0;'?'=0;'+'=0"))
+
+noaaData$CROPDMGEXP <- as.numeric(recode(noaaData$CROPDMGEXP,"'0'=1;'1'=10;'2'=10^2;'3'=10^3;'4'=10^4;'5'=10^5;'6'=10^6;'7'=10^7;'8'=10^8;'b'=10^9;'h'=10^2;'k'=10^3;'m'=10^6;'-'=0;'?'=0;'+'=0"))
+
+#Get dollar amount by multiplying by exponential
+noaaData$PROPDMGDOLL <- noaaData$PROPDMG * noaaData$PROPDMGEXP
+noaaData$CROPDMGDOLL <- noaaData$CROPDMG * noaaData$CROPDMGEXP
+
+#Reorganize the data by event type
+econ <- aggregate(cbind(PROPDMGDOLL, CROPDMGDOLL) ~ EVTYPE, noaaData, sum)
+econData <- melt(head(econ[order(-econ$PROPDMGDOLL, -econ$CROPDMGDOLL),],10))
+
+```
+
+##Results
+
+###Human Health Impact
+Across the United States, the types of events that are most harmful with respect to population health can be seen as follows. We can see in the plot, the number of fatalities and injuries by weather-related event type.
+
+```{r}
+ggplot(harmData, aes(x = EVTYPE, y = value, fill = variable)) + 
+        geom_bar(stat = "identity") + ggtitle("Harmful Events to Humans") +
+        labs(x = "", y = "Number of humans impacted") + 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+Figure 1:  Injuries and fatalities to humans by weather-related event.  
+
+
+We can see that tornadoes have the highest number of injuries and fatalities by far. In addition, we can see that weather-related events cause less deaths than fatalities.
+
+###Economic Damage Impact
+Now, we analyze across the United States, which types of events have the greatest economic consequences.
+
+```{r}
+ggplot(econData, aes(x=EVTYPE, y=value, fill=variable)) +
+        geom_bar(stat = "identity") + labs(x="", y = "Crop Damages in USD") +
+        scale_fill_manual(values = c("purple", "blue"), labels = c("Property damage", "Crop damage")) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+Figure 2:  Crop damages in USD by weather-related event.  
+
+
+From the plot, we can see that there are significant damages from tornadoes again for economic damages. When only looking at crop damages, we see that hail causes the most damage.
